@@ -3,13 +3,11 @@ package com.idocod.idopaste;
 import android.accessibilityservice.AccessibilityService;
 import android.content.ClipboardManager;
 import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
-/** Detects copy actions and captures the selected/copied text from the window tree. */
+/** Reads the clipboard on accessibility events to capture copied text (Android 10+ safe). */
 public class IdoPasteAccessibilityService extends AccessibilityService {
 
     private static final long MIN_INTERVAL_MS = 800;
@@ -18,7 +16,7 @@ public class IdoPasteAccessibilityService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || event.getSource() == null) {
+        if (event == null) {
             return;
         }
         long now = System.currentTimeMillis();
@@ -26,9 +24,6 @@ public class IdoPasteAccessibilityService extends AccessibilityService {
             return;
         }
         String captured = tryClipboard();
-        if (captured == null) {
-            captured = tryNodeText(event);
-        }
         if (captured != null && !captured.trim().isEmpty()) {
             lastCapture = now;
             if (!recent.contains(captured)) {
@@ -52,32 +47,6 @@ public class IdoPasteAccessibilityService extends AccessibilityService {
             }
         } catch (SecurityException | IllegalStateException ignored) {
         }
-        return null;
-    }
-
-    private String tryNodeText(AccessibilityEvent event) {
-        AccessibilityNodeInfo node = event.getSource();
-        if (node == null) {
-            return null;
-        }
-        int type = event.getEventType();
-        if (type == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
-                || type == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
-                || type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            List<CharSequence> texts = event.getText();
-            if (texts != null && !texts.isEmpty()) {
-                StringBuilder sb = new StringBuilder();
-                for (CharSequence t : texts) {
-                    if (t != null && t.length() > 0) {
-                        sb.append(t);
-                    }
-                }
-                if (sb.length() > 0) {
-                    return sb.toString();
-                }
-            }
-        }
-        node.recycle();
         return null;
     }
 
