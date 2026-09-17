@@ -4,15 +4,16 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.ClipboardManager;
 import android.view.accessibility.AccessibilityEvent;
 
-import java.util.HashSet;
-import java.util.Set;
-
-/** Reads the clipboard on accessibility events to capture copied text (Android 10+ safe). */
+/**
+ * Captura lo copiado: lee el portapapeles en cada evento de accesibilidad y
+ * guarda el texto SOLO cuando cambió respecto al último visto. Como escribir
+ * no modifica el portapapeles, nunca guarda lo que se escribe.
+ */
 public class IdoPasteAccessibilityService extends AccessibilityService {
 
-    private static final long MIN_INTERVAL_MS = 800;
-    private long lastCapture = 0;
-    private final Set<String> recent = new HashSet<>();
+    private static final long MIN_INTERVAL_MS = 300;
+    private long lastEventAt = 0;
+    private String lastClipboard = null;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -20,23 +21,24 @@ public class IdoPasteAccessibilityService extends AccessibilityService {
             return;
         }
         long now = System.currentTimeMillis();
-        if (now - lastCapture < MIN_INTERVAL_MS) {
+        if (now - lastEventAt < MIN_INTERVAL_MS) {
             return;
         }
-        String captured = tryClipboard();
-        if (captured != null && !captured.trim().isEmpty()) {
-            lastCapture = now;
-            if (!recent.contains(captured)) {
-                if (recent.size() > 12) {
-                    recent.clear();
-                }
-                recent.add(captured);
-                ClipStore.add(this, captured);
-            }
+        String current = readClipboard();
+        if (current == null) {
+            return;
+        }
+        if (current.equals(lastClipboard)) {
+            return;
+        }
+        lastEventAt = now;
+        lastClipboard = current;
+        if (!current.trim().isEmpty()) {
+            ClipStore.add(this, current);
         }
     }
 
-    private String tryClipboard() {
+    private String readClipboard() {
         try {
             ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
             if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip() != null) {
@@ -57,6 +59,7 @@ public class IdoPasteAccessibilityService extends AccessibilityService {
     @Override
     public void onServiceConnected() {
         super.onServiceConnected();
+        lastClipboard = readClipboard();
         ClipboardCaptureService.start(this);
     }
 
